@@ -26,9 +26,17 @@
 	let round = $state(null);
 	let room = $state(null);
 	let batches = $state([]);
+	let promotions = $state(null);
+	let eliminated = $state(null);
+	let viewTab = $state('promoted'); // 'promoted' | 'eliminated'
 	let isLoading = $state(true);
 	let isActionLoading = $state(false);
 	let error = $state('');
+
+	// Derivations
+	let currentList = $derived(
+		viewTab === 'promoted' ? promotions?.promoted_participants : eliminated?.eliminated_participants
+	);
 
 	let showCreateBatchModal = $state(false);
 	let showPromoteModal = $state(false);
@@ -45,15 +53,19 @@
 	// --- ACTIONS ---
 	onMount(async () => {
 		try {
-			await Promise.all([fetchRoundDetail(), fetchBatches()]);
+			await Promise.all([fetchRoundDetail(), fetchBatches(), fetchPromotions(), fetchEliminated()]);
 		} catch (e) {
 			error = 'Failed to load page data. Please refresh.';
 		} finally {
 			isLoading = false;
 		}
 
-		// Refresh batches periodically
-		refreshInterval = setInterval(fetchBatches, 5000);
+		// Refresh data periodically
+		refreshInterval = setInterval(() => {
+			fetchBatches();
+			fetchPromotions();
+			fetchEliminated();
+		}, 5000);
 	});
 
 	onDestroy(() => {
@@ -105,6 +117,37 @@
 		}
 	}
 
+	async function fetchPromotions() {
+		try {
+			const res = await authenticatedFetch(`${API_BASE_URL}/admin/rounds/${roundId}/promotions`);
+			const result = await res.json();
+			if (result.success) {
+				promotions = result.data;
+			}
+		} catch (err) {
+			console.error('Failed to load promotions');
+		}
+	}
+
+	async function fetchEliminated() {
+		try {
+			const res = await authenticatedFetch(`${API_BASE_URL}/admin/rounds/${roundId}/eliminated`);
+			const result = await res.json();
+			if (result.success) {
+				eliminated = result.data;
+			}
+		} catch (err) {
+			console.error('Failed to load eliminated list');
+		}
+	}
+
+	function formatTime(seconds) {
+		if (seconds == null) return '--:--';
+		const m = Math.floor(seconds / 60);
+		const s = Math.floor(seconds % 60);
+		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
+
 	async function handleCreateBatch(e) {
 		e.preventDefault();
 		isActionLoading = true;
@@ -149,9 +192,9 @@
 			const result = await res.json();
 
 			if (result.success) {
-				alert(`Successfully promoted ${result.data.promoted_count} participants!`);
+				alert(`Successfully promoted ${result.data.promoted} participants!`);
 				showPromoteModal = false;
-				await fetchRoundDetail(); // Refresh data
+				await Promise.all([fetchRoundDetail(), fetchPromotions(), fetchEliminated()]); // Refresh data
 			} else {
 				alert(result.error || 'Promotion failed. Ensure all batches have ended.');
 			}
@@ -364,6 +407,168 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Results Section (Promoted / Eliminated Tabs) -->
+		<div class="mt-16 flex flex-col gap-6">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div
+					class="flex items-center gap-2 rounded-[20px] bg-white/40 p-1.5 shadow-sm backdrop-blur-xl"
+				>
+					<button
+						onclick={() => (viewTab = 'promoted')}
+						class="flex items-center gap-2 rounded-[14px] px-6 py-2.5 text-sm font-bold transition-all {viewTab ===
+						'promoted'
+							? 'bg-zinc-900 text-white shadow-lg'
+							: 'text-zinc-500 hover:bg-white/50'}"
+					>
+						<Trophy size={16} class={viewTab === 'promoted' ? 'text-amber-400' : ''} />
+						Promoted
+						{#if promotions}
+							<span class="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]"
+								>{promotions.total_promoted}</span
+							>
+						{/if}
+					</button>
+					<button
+						onclick={() => (viewTab = 'eliminated')}
+						class="flex items-center gap-2 rounded-[14px] px-6 py-2.5 text-sm font-bold transition-all {viewTab ===
+						'eliminated'
+							? 'bg-zinc-900 text-white shadow-lg'
+							: 'text-zinc-500 hover:bg-white/50'}"
+					>
+						<Users size={16} />
+						Eliminated
+						{#if eliminated}
+							<span class="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]"
+								>{eliminated.total_eliminated}</span
+							>
+						{/if}
+					</button>
+				</div>
+			</div>
+
+			{#if !currentList || currentList.length === 0}
+				<div
+					in:fade
+					class="flex flex-col items-center justify-center rounded-[40px] border-2 border-dashed border-gray-200 bg-white/20 py-24 text-center"
+				>
+					<div
+						class="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gray-50 text-gray-400"
+					>
+						{#if viewTab === 'promoted'}
+							<Trophy size={32} />
+						{:else}
+							<Users size={32} />
+						{/if}
+					</div>
+					<h3 class="text-xl font-bold text-zinc-900">
+						{viewTab === 'promoted' ? 'No promotions yet' : 'No eliminations recorded'}
+					</h3>
+					<p class="mt-2 text-sm leading-relaxed font-medium text-gray-500">
+						{viewTab === 'promoted'
+							? 'Results will appear here once you promote top participants.'
+							: 'Participants who are not promoted will appear here.'}
+					</p>
+				</div>
+			{:else}
+				<div
+					class="overflow-hidden rounded-[32px] border border-white/60 bg-white/40 shadow-xl backdrop-blur-3xl"
+				>
+					<div class="overflow-x-auto">
+						<table class="w-full text-left">
+							<thead>
+								<tr class="border-b border-gray-100 bg-white/50">
+									<th
+										class="px-6 py-4 text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Rank</th
+									>
+									<th
+										class="px-6 py-4 text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Participant</th
+									>
+									<th
+										class="px-6 py-4 text-center text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Batch</th
+									>
+									<th
+										class="px-6 py-4 text-center text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Time</th
+									>
+									<th
+										class="px-6 py-4 text-center text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Score</th
+									>
+									<th
+										class="px-6 py-4 text-center text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Correct</th
+									>
+									<th
+										class="px-6 py-4 text-center text-[10px] font-black tracking-widest text-gray-400 uppercase"
+										>Wrong</th
+									>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-50">
+								{#each currentList as p}
+									<tr
+										class="transition-colors hover:bg-white/30 {viewTab === 'promoted'
+											? 'bg-green-50/5'
+											: ''}"
+									>
+										<td class="px-6 py-4">
+											<div
+												class="flex h-8 w-8 items-center justify-center rounded-lg font-black {viewTab ===
+												'promoted'
+													? p.rank === 1
+														? 'bg-amber-100 text-amber-600'
+														: p.rank === 2
+															? 'bg-gray-100 text-gray-500'
+															: p.rank === 3
+																? 'bg-orange-100 text-orange-600'
+																: 'bg-blue-50 text-blue-400'
+													: 'bg-gray-100 text-gray-400'}"
+											>
+												{p.rank}
+											</div>
+										</td>
+										<td class="px-6 py-4">
+											<div class="flex flex-col">
+												<span class="font-bold text-zinc-900">{p.name}</span>
+												<div class="mt-1 flex items-center gap-2">
+													<span
+														class="rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-400"
+														>{p.participant_id}</span
+													>
+													<span class="text-[10px] font-medium text-blue-500">{p.college_name}</span
+													>
+												</div>
+											</div>
+										</td>
+										<td class="px-6 py-4 text-center">
+											<span class="text-xs font-bold text-zinc-600">B{p.batch_number}</span>
+										</td>
+										<td class="px-6 py-4 text-center">
+											<span class="font-mono text-xs font-bold text-zinc-600"
+												>{formatTime(p.time_taken_seconds)}</span
+											>
+										</td>
+										<td class="px-6 py-4 text-center">
+											<span class="text-lg font-black text-blue-600">{p.total_marks ?? 0}</span>
+										</td>
+										<td class="px-6 py-4 text-center">
+											<span class="text-sm font-bold text-green-600">{p.correct_count ?? 0}</span>
+										</td>
+										<td class="px-6 py-4 text-center">
+											<span class="text-sm font-bold text-red-400">{p.wrong_count ?? 0}</span>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -371,7 +576,7 @@
 
 {#if showCreateBatchModal}
 	<div
-		class="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-md"
+		class="fixed inset-0 z-100 flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-md"
 		in:fade
 	>
 		<div
@@ -421,7 +626,7 @@
 
 {#if showPromoteModal}
 	<div
-		class="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-md"
+		class="fixed inset-0 z-100 flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-md"
 		in:fade
 	>
 		<div
@@ -483,8 +688,4 @@
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-
-	.font-poppins {
-		font-family: 'Poppins', sans-serif;
-	}
 </style>

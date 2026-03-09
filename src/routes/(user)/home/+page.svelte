@@ -46,6 +46,9 @@
 
 			if (result.success) {
 				rooms = result.data;
+			} else if (result.code === 'UNAUTHORIZED') {
+				handleLogout();
+				return;
 			} else {
 				error = result.error || 'Failed to load rooms';
 			}

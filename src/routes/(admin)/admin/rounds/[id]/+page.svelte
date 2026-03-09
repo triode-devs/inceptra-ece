@@ -40,6 +40,9 @@
 
 	let showCreateBatchModal = $state(false);
 	let showPromoteModal = $state(false);
+	let showPromoteSuccessModal = $state(false);
+	let promoteResultList = $state([]);
+	let promoteResultCount = $state(0);
 
 	// Modal States
 	let newBatchNumber = $state(1);
@@ -192,8 +195,10 @@
 			const result = await res.json();
 
 			if (result.success) {
-				alert(`Successfully promoted ${result.data.promoted} participants!`);
+				promoteResultList = result.data.promoted || [];
+				promoteResultCount = result.data.promoted_count || promoteResultList.length;
 				showPromoteModal = false;
+				showPromoteSuccessModal = true;
 				await Promise.all([fetchRoundDetail(), fetchPromotions(), fetchEliminated()]); // Refresh data
 			} else {
 				alert(result.error || 'Promotion failed. Ensure all batches have ended.');
@@ -682,6 +687,97 @@
 					{/if}
 				</button>
 			</form>
+		</div>
+	</div>
+{/if}
+
+{#if showPromoteSuccessModal}
+	<div
+		class="fixed inset-0 z-100 flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-md"
+		in:fade
+	>
+		<div
+			class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[40px] bg-white shadow-2xl"
+			in:fly={{ y: 20 }}
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-gray-50 p-6 text-zinc-900"
+			>
+				<div class="flex items-center gap-3">
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 text-green-600"
+					>
+						<Trophy size={18} />
+					</div>
+					<div>
+						<h2 class="text-xl font-bold">Promotion Successful</h2>
+						<p class="mt-1 text-[10px] font-black tracking-widest text-zinc-400 uppercase">
+							Promoted {promoteResultCount} Participants
+						</p>
+					</div>
+				</div>
+				<button
+					onclick={() => (showPromoteSuccessModal = false)}
+					class="rounded-xl p-2 text-gray-400 hover:bg-gray-100"
+				>
+					<X size={20} />
+				</button>
+			</div>
+
+			<div class="overflow-y-auto bg-gray-50/50 p-6">
+				<p class="mb-4 text-xs leading-relaxed font-medium text-zinc-500">
+					Sorted by Total Marks (descending), Correct Count (descending), and Time Taken
+					(ascending).
+				</p>
+
+				<div class="flex flex-col gap-3">
+					{#each promoteResultList as p, i}
+						<div
+							class="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+						>
+							<div class="flex items-center gap-4">
+								<div
+									class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-xs font-black text-gray-600"
+								>
+									#{i + 1}
+								</div>
+								<div>
+									<h4 class="font-bold text-zinc-900">{p.name}</h4>
+									<p class="text-[10px] font-medium text-gray-400 sm:text-xs">{p.participant_id}</p>
+								</div>
+							</div>
+
+							<div class="flex flex-wrap items-center justify-end gap-3 sm:gap-6">
+								<div class="text-center">
+									<p class="text-[9px] font-black tracking-widest text-zinc-400 uppercase">Score</p>
+									<p class="font-bold text-blue-600">{p.total_marks}</p>
+								</div>
+								<div class="text-center">
+									<p class="text-[9px] font-black tracking-widest text-zinc-400 uppercase">
+										Correct
+									</p>
+									<p class="font-bold text-green-600">{p.correct_count}</p>
+								</div>
+								<div class="text-center">
+									<p class="text-[9px] font-black tracking-widest text-zinc-400 uppercase">Time</p>
+									<p class="mt-0.5 font-mono text-xs font-bold text-zinc-600">
+										{formatTime(p.time_taken_seconds)}
+									</p>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+
+			<div class="shrink-0 border-t border-gray-50 p-6">
+				<button
+					onclick={() => (showPromoteSuccessModal = false)}
+					class="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-900 font-bold text-white shadow-xl shadow-zinc-900/20 transition-all hover:bg-zinc-800 active:scale-95"
+				>
+					<CheckCircle2 size={18} /> Done
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}

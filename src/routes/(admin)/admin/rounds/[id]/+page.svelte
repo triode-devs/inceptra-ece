@@ -15,7 +15,8 @@
 		Trash2,
 		Clock,
 		PauseCircle,
-		ArrowRight
+		ArrowRight,
+		RefreshCw
 	} from 'lucide-svelte';
 	import { API_BASE_URL, authenticatedFetch } from '$lib';
 	import { page } from '$app/state';
@@ -32,6 +33,7 @@
 	let isLoading = $state(true);
 	let isActionLoading = $state(false);
 	let error = $state('');
+	let isRefreshing = $state(false);
 
 	// Derivations
 	let currentList = $derived(
@@ -48,8 +50,6 @@
 	let newBatchNumber = $state(1);
 	let promoteTopN = $state(10);
 
-	let refreshInterval;
-
 	// Sorted copy so we never mutate reactive state in-place
 	let sortedBatches = $derived([...batches].sort((a, b) => a.batch_number - b.batch_number));
 
@@ -62,18 +62,20 @@
 		} finally {
 			isLoading = false;
 		}
-
-		// Refresh data periodically
-		refreshInterval = setInterval(() => {
-			fetchBatches();
-			fetchPromotions();
-			fetchEliminated();
-		}, 5000);
 	});
 
-	onDestroy(() => {
-		if (refreshInterval) clearInterval(refreshInterval);
-	});
+	onDestroy(() => {});
+
+	async function refreshAllData() {
+		isRefreshing = true;
+		try {
+			await Promise.all([fetchRoundDetail(), fetchBatches(), fetchPromotions(), fetchEliminated()]);
+		} catch (e) {
+			console.error('Refresh failed', e);
+		} finally {
+			isRefreshing = false;
+		}
+	}
 
 	async function fetchRoundDetail() {
 		try {
@@ -239,6 +241,14 @@
 		</div>
 
 		<div class="flex items-center gap-4">
+			<button
+				onclick={refreshAllData}
+				disabled={isRefreshing}
+				class="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-100 bg-white text-zinc-500 shadow-sm transition-all hover:bg-zinc-900 hover:text-white active:scale-95 disabled:opacity-50"
+				title="Refresh Data"
+			>
+				<RefreshCw size={20} class={isRefreshing ? 'animate-spin' : ''} />
+			</button>
 			<button
 				onclick={() => (showPromoteModal = true)}
 				class="hidden h-12 items-center gap-2 rounded-2xl border border-gray-100 bg-white px-6 font-bold text-zinc-900 shadow-sm transition-all hover:bg-gray-50 active:scale-95 sm:flex"

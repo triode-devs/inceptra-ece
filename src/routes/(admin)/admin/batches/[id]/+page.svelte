@@ -12,7 +12,8 @@
 		CheckCircle2,
 		Trash2,
 		Clock,
-		Search
+		Search,
+		RefreshCw
 	} from 'lucide-svelte';
 	import { API_BASE_URL, authenticatedFetch } from '$lib';
 	import { page } from '$app/state';
@@ -27,8 +28,7 @@
 	let isActionLoading = $state(false);
 	let error = $state('');
 	let searchQuery = $state('');
-
-	let refreshInterval;
+	let isRefreshing = $state(false);
 
 	// --- ACTIONS ---
 	onMount(async () => {
@@ -39,14 +39,20 @@
 		} finally {
 			isLoading = false;
 		}
-
-		// Refresh batch periodically to get real-time status and participants
-		refreshInterval = setInterval(loadData, 5000);
 	});
 
-	onDestroy(() => {
-		if (refreshInterval) clearInterval(refreshInterval);
-	});
+	onDestroy(() => {});
+
+	async function refreshAllData() {
+		isRefreshing = true;
+		try {
+			await loadData();
+		} catch (e) {
+			console.error('Refresh failed', e);
+		} finally {
+			isRefreshing = false;
+		}
+	}
 
 	async function loadData() {
 		try {
@@ -198,8 +204,17 @@
 			</div>
 		</div>
 
-		{#if batch && !isLoading}
-			<div class="flex items-center gap-4">
+		<div class="flex items-center gap-4">
+			<button
+				onclick={refreshAllData}
+				disabled={isRefreshing}
+				class="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-100 bg-white text-zinc-500 shadow-sm transition-all hover:bg-zinc-900 hover:text-white active:scale-95 disabled:opacity-50"
+				title="Refresh Data"
+			>
+				<RefreshCw size={20} class={isRefreshing ? 'animate-spin' : ''} />
+			</button>
+
+			{#if batch && !isLoading}
 				{#if batch.status === 'pending'}
 					<button
 						onclick={deleteBatch}
@@ -242,8 +257,8 @@
 						<span>Batch Ended</span>
 					</div>
 				{/if}
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</header>
 
 	{#if isLoading && !batch}
